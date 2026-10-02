@@ -140,6 +140,7 @@ class SettingsPages : public std::enable_shared_from_this<SettingsPages> {
   std::unique_ptr<MenuScreen> Mods();
   std::unique_ptr<MenuScreen> Cheats();
   std::unique_ptr<MenuScreen> ModActions();
+  std::unique_ptr<MenuScreen> ConfirmQuit();
 
  public:
   std::unique_ptr<MenuScreen> Trainer();
@@ -917,6 +918,21 @@ std::unique_ptr<MenuScreen> SettingsPages::ConfirmRestore(std::string slot) {
   return screen;
 }
 
+std::unique_ptr<MenuScreen> SettingsPages::ConfirmQuit() {
+  auto self = std::make_shared<const MenuScreen*>(nullptr);
+  std::vector<MenuRow> rows(2);
+  rows[0].label = "QUIT GAME";
+  rows[0].activate = [quit = services_.quit] { quit(); };
+  rows[1].label = "CANCEL";
+  rows[1].activate = [this, self] { host_ui_.Finish(*self); };
+  auto screen = std::make_unique<MenuScreen>("QUIT GAME", std::move(rows));
+  screen->set_body("Progress since the game last saved is lost. Quit while the save icon is "
+                   "not showing.");
+  screen->SetFocus(1);
+  *self = screen.get();
+  return screen;
+}
+
 std::unique_ptr<MenuScreen> SettingsPages::Root() {
   std::vector<MenuRow> rows;
   MenuRow resume;
@@ -945,6 +961,9 @@ std::unique_ptr<MenuScreen> SettingsPages::Root() {
       self->host_ui_.Push(self->services_.achievements());
     };
     rows.push_back(std::move(row));
+  }
+  if (services_.quit) {
+    rows.push_back(Page("QUIT GAME", &SettingsPages::ConfirmQuit));
   }
   return std::make_unique<MenuScreen>("SETTINGS", std::move(rows));
 }

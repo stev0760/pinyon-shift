@@ -33,6 +33,9 @@ struct SettingsServices {
   // Where the latest frame reached the window, in pixels (after output
   // scaling and letterboxing); the display and graphics notes give it.
   std::function<std::optional<std::pair<uint32_t, uint32_t>>()> output_size;
+  // Closes the game the way the window's close button does; no QUIT GAME row
+  // without it.
+  std::function<void()> quit;
 };
 
 std::unique_ptr<hostui::MenuScreen> CreateSettingsMenu(hostui::HostUi& host_ui,

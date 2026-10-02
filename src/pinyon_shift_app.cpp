@@ -662,6 +662,17 @@ void PinyonShiftApp::OpenSettingsMenu() {
                ? std::pair{height * 16 / 9, height}
                : std::pair{width, width * 9 / 16};
   };
+  services.quit = [this] {
+    if (!window()) return;
+    // Deferred so the menu's own callback returns first. RequestClose skips
+    // the close request the window's button sends, so make it here, as the
+    // render test does.
+    window()->app_context().CallInUIThreadDeferred([this] {
+      if (window() && OnWindowCloseRequested()) {
+        window()->RequestClose();
+      }
+    });
+  };
   host_ui_->Open(pinyon_shift::ui::CreateSettingsMenu(*host_ui_, *host_config_, services));
 }
 
