@@ -268,8 +268,20 @@ The setup script provisions pinned dependencies, initializes ShiftGlue,
 verifies and extracts the disc, generates translated source, and builds Release
 with both the Vulkan and the Direct3D 12 backends.
 `python tools/pinyon.py launch` starts the built game the same way without
-PowerShell, with `--state-root`, `--hidden` and game arguments after `--`; it is
-the launcher for Linux builds. See [Building](docs/BUILDING.md) and
+PowerShell, with `--state-root`, `--hidden` and game arguments after `--`.
+
+On Linux x86-64 (Vulkan), the same script sets up and builds:
+
+```sh
+python3 tools/pinyon.py setup --iso /path/to/your-disc.iso
+python3 tools/pinyon.py prepare-shaders
+python3 tools/pinyon.py launch
+```
+
+or `python3 launcher/linux/pinyon_shift_launcher.py` does it from a GTK window.
+`prepare-shaders` is optional: it compiles the opening's Vulkan pipelines
+into the cache ahead of play, in a hidden two-minute run.
+See [Building](docs/BUILDING.md#linux) and
 [Troubleshooting](docs/TROUBLESHOOTING.md) for details.
 
 ## Roadmap

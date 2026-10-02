@@ -58,3 +58,58 @@ It deliberately excludes the compiled preview, generated translations, and all
 game content. An empty `portable.txt` beside the extracted launcher (or
 `--portable` on its command line) makes it a portable install that keeps
 everything in a `data` folder beside it; see "Portable install" in the README.
+
+## Linux
+
+Linux x86-64 builds the same preview with the Vulkan backend (Direct3D 12 is
+Windows-only). Install the build tools and a Vulkan driver with your
+distribution's packages; on Arch Linux:
+
+```sh
+sudo pacman -S --needed clang lld cmake ninja git python vulkan-icd-loader
+```
+
+Then, from the repository:
+
+```sh
+python3 tools/pinyon.py setup --iso /path/to/your-disc.iso
+python3 tools/pinyon.py launch
+```
+
+`setup` verifies the image against `config/supported-dumps.json`, prepares the
+pinned ShiftGlue submodule, extracts the disc into `.local/game/base` (building
+the release toolchain's extract-xiso tag under `.local/toolchain` when no
+`extract-xiso` is installed), translates the game code and compiles
+`out/build/linux-amd64-release/pinyon_shift`. It picks the FMA3 CPU baseline
+when the processor has it and one compile job per 1.5 GB of available memory;
+`--cpu-baseline` and `--jobs` override both. `python3 tools/pinyon.py build`
+rebuilds after host or ShiftGlue changes, and `python3 tools/pinyon.py verify
+--iso FILE` checks an image only. Logs from each step are in `.local/logs`.
+
+On Vulkan the game translates shaders as it runs and keeps the pipelines the
+driver compiles in `.local/preview/cache/shaders` for later runs, so a drive
+through new scenery pauses briefly only the first time its shaders are met.
+To take the opening's share of that out of play:
+
+```sh
+python3 tools/pinyon.py prepare-shaders
+```
+
+It drives the opening hidden for about two minutes, on a throwaway state that
+shares the preview's cache and settings (the shaders depend on the internal
+resolution), and never touches the save. Run it again after changing the
+internal resolution or the graphics driver.
+
+The graphical launcher does the same from a window: choose the ISO, verify and
+build, prepare shaders, change the internal resolution, output scaling and
+Treasure Map, and play. It needs GTK 4, libadwaita and PyGObject (`python-gobject`, `gtk4` and
+`libadwaita` on Arch Linux):
+
+```sh
+python3 launcher/linux/pinyon_shift_launcher.py
+python3 launcher/linux/pinyon_shift_launcher.py --install-desktop-entry
+```
+
+The second command adds Pinyon Shift to the desktop's application menu. The
+game keeps its state (settings, saves, logs and crash reports) in
+`.local/preview`, as on Windows.
