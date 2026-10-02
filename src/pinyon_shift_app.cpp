@@ -382,7 +382,8 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
 std::unique_ptr<rex::ui::WindowedApp> PinyonShiftApp::Create(
     rex::ui::WindowedAppContext& context) {
   if (!pinyon_shift::diagnostics::InitializeEarly()) {
-    ExitProcess(ERROR_NOT_SUPPORTED);
+    // ERROR_NOT_SUPPORTED on Windows.
+    pinyon_shift::platform::ExitImmediately(50);
   }
   return std::unique_ptr<PinyonShiftApp>(
       new PinyonShiftApp(context, "pinyon_shift", PPCImageConfig));
@@ -397,6 +398,12 @@ void PinyonShiftApp::OnConfigurePaths(rex::PathConfig& paths) {
   paths.user_data_root = state_root / "user";
   paths.update_data_root = state_root / "update";
   paths.cache_root = state_root / "cache";
+  // Shader preparation (pinyon.py prepare-shaders) runs the game on a
+  // throwaway state with the player's cache, so what it compiles is there
+  // when they play.
+  if (auto cache_root = diagnostics::EnvironmentPath("PINYON_SHIFT_CACHE_ROOT")) {
+    paths.cache_root = *cache_root;
+  }
   paths.config_path = state_root / "config" / "pinyon_shift.toml";
   host_config_ = std::make_unique<pinyon_shift::config::HostConfig>(paths.config_path);
   // A restore the player scheduled in the settings screen, before the title
