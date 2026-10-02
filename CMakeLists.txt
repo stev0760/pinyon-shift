@@ -154,6 +154,15 @@ add_executable(pinyon_shift_fh1_edram_tiles_tests EXCLUDE_FROM_ALL
 target_include_directories(pinyon_shift_fh1_edram_tiles_tests PRIVATE ${REXSDK_DIR}/include)
 target_link_libraries(pinyon_shift_fh1_edram_tiles_tests PRIVATE rex::runtime)
 
+if(NOT WIN32)
+    # The POSIX crash reporter over a stand-in for the runtime's fault handler.
+    add_executable(pinyon_shift_crash_reporter_tests EXCLUDE_FROM_ALL
+        tests/crash/crash_reporter_posix_test.cpp
+        src/crash_reporter_posix.cpp
+    )
+    target_include_directories(pinyon_shift_crash_reporter_tests PRIVATE src)
+endif()
+
 # Every host-side test, for CI (PINYON_SHIFT_HOST_TESTS_ONLY) and local runs.
 add_custom_target(pinyon_shift_host_tests)
 add_dependencies(pinyon_shift_host_tests
@@ -165,6 +174,9 @@ add_dependencies(pinyon_shift_host_tests
     pinyon_shift_car_cards_tests
     pinyon_shift_fh1_edram_tiles_tests
     pinyon_shift_mod_hello_telemetry)
+if(NOT WIN32)
+    add_dependencies(pinyon_shift_host_tests pinyon_shift_crash_reporter_tests)
+endif()
 
 add_executable(pinyon_shift_fh1_archive_extract EXCLUDE_FROM_ALL
     tools/fh1_archive_extract.cpp

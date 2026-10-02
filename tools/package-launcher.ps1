@@ -66,8 +66,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Launcher publish failed.' }
 $include = @(
     'CMakeLists.txt', 'CMakePresets.json', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md',
     'cmake', 'config/gamecontrollerdb.txt', 'config/release.json', 'config/release-toolchain.json', 'config/supported-dumps.json',
-    'config/rexglue', 'include', 'mods_src', 'src', 'tests/config', 'tests/native_renderer',
-    'tests/save', 'tests/ui',
+    'config/rexglue', 'include', 'mods_src', 'src', 'tests/config', 'tests/crash',
+    'tests/native_renderer', 'tests/save', 'tests/ui',
     'tools/fh1_archive_extract.cpp', 'tools/fh1_texture_import.cpp', 'tools/thread_sampler.cpp',
     'tools/extract-fh1-shader-corpus.py', 'tools/build-fh1-gpu-prewarm.py',
     'tools/produce-fh1-artifacts.ps1', 'tools/prepare-fh1-shaders.ps1', 'config/render-tests',
