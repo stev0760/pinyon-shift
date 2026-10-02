@@ -56,8 +56,14 @@ constexpr uint32_t kManagerEnd = 8;
 constexpr uint32_t kActivityRevealed = 8;  // u8, set by an activity's reveal (vtable +72)
 
 // sub_828BC9D8: nonzero while free roam's collectibles are live (free roam,
-// not the first-time career); r3 is ignored.
+// not the first-time career); r3 is ignored. Without the manager, or while
+// the manager has no collectibles group yet, it falls back to the game mode:
+// [[handle + 4] + 124] through sub_824878D0, which faults while free roam is
+// still loading and that object is not there, so the host checks it first.
 constexpr uint32_t kCollectiblesLive = 0x828BC9D8u;
+constexpr uint32_t kHandleMode = 4;
+constexpr uint32_t kModeState = 124;
+constexpr uint32_t kModeStateKind = 56;
 // sub_828AF780(manager): 1 when every revealable activity with a saved
 // record is revealed, the state a bought Treasure Map leaves.
 constexpr uint32_t kAllRevealed = 0x828AF780u;
@@ -106,9 +112,20 @@ uint32_t LoadPointer(uint32_t address, uint32_t size) {
   return Readable(value, size) ? value : 0;
 }
 
-uint32_t ActivityManager() {
+uint32_t GameHandle() {
   const uint32_t holder = LoadPointer(kGameHolder, kHolderHandle + 4);
-  const uint32_t handle = holder ? LoadPointer(holder + kHolderHandle, kHandleComponents + 4) : 0;
+  return holder ? LoadPointer(holder + kHolderHandle, kHandleComponents + 4) : 0;
+}
+
+// Whether sub_828BC9D8's fallback can be taken safely, see kCollectiblesLive.
+bool GameModeReadable() {
+  const uint32_t handle = GameHandle();
+  const uint32_t mode = handle ? LoadPointer(handle + kHandleMode, kModeState + 4) : 0;
+  return mode != 0 && LoadPointer(mode + kModeState, kModeStateKind + 4) != 0;
+}
+
+uint32_t ActivityManager() {
+  const uint32_t handle = GameHandle();
   const uint32_t components = handle ? LoadPointer(handle + kHandleComponents, 4) : 0;
   const uint32_t array = components ? LoadPointer(components, 4) : 0;
   if (!array || !Readable(kActivityManagerIndex, 4)) return 0;
@@ -143,11 +160,12 @@ void ApplyTreasureMap() {
   static uint32_t logged_owned = 0;
   const uint32_t manager = ActivityManager();
   if (manager == 0) return;
-  if ((pinyon_shift::mod::CallGuest(kCollectiblesLive, {0}) & 0xFF) == 0) return;
   // While free roam loads the list is still empty, and sub_828AF780 finds an
-  // empty list all revealed.
+  // empty list all revealed. Both are read before the first guest call: in
+  // that state sub_828BC9D8 itself may fault (kCollectiblesLive).
   const auto [activities, before] = CountRevealed(manager);
-  if (activities == 0) return;
+  if (activities == 0 || !GameModeReadable()) return;
+  if ((pinyon_shift::mod::CallGuest(kCollectiblesLive, {0}) & 0xFF) == 0) return;
   if ((pinyon_shift::mod::CallGuest(kAllRevealed, {manager}) & 0xFF) != 0) {
     if (logged_owned != manager) {
       logged_owned = manager;
