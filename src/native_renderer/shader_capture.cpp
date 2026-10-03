@@ -27,7 +27,8 @@ namespace {
 
 constexpr size_t kMaximumEntries = 65'535;
 constexpr size_t kMaximumBytecodeBytes = 16 * 1024 * 1024;
-constexpr size_t kMaximumCaptureBytes = 512 * 1024 * 1024;
+// The Vulkan disc corpus is about 1.1 GB of SPIR-V at 2x.
+constexpr size_t kMaximumCaptureBytes = size_t(2) * 1024 * 1024 * 1024;
 constexpr size_t kMaximumBindings = 255;
 
 // Fh1ShaderPack::Backend values.

@@ -76,7 +76,7 @@ never substitutes another specialization. Stages are `vertex`, `pixel` and
 shader key as its specialization and no bindings. Bytecode paths must remain
 below the manifest directory, begin with the backend's magic (`DXBC`, or the
 SPIR-V word `0x07230203` with a whole number of words), match their SHA-256,
-and be at most 16 MiB. Packs are bounded to 65,535 entries and 1 GiB.
+and be at most 16 MiB. Packs are bounded to 65,535 entries and 2 GiB (the Vulkan disc corpus is about 1.1 GB of SPIR-V at 2x).
 
 An entry may also carry `bytecode_offset` and `bytecode_size`; `bytecode` then
 names a file shared by many entries and the entry's bytecode is that byte
