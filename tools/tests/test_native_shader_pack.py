@@ -434,19 +434,20 @@ class NativeShaderPackTests(unittest.TestCase):
         self.assertIn("'.dxil', '.pnsp'", report)
 
     def test_runtime_pack_loader(self):
+        host, suffix = ("win", ".exe") if sys.platform == "win32" else ("linux", "")
         executable = next(
             (
                 candidate
                 for candidate in (
-                    ROOT / f"out/build/{name}/pinyon_shift_fh1_shader_pack_tests.exe"
-                    for name in ("win-amd64-release", "win-amd64-relwithdebinfo")
+                    ROOT / f"out/build/{host}-amd64-{name}/pinyon_shift_fh1_shader_pack_tests{suffix}"
+                    for name in ("release", "relwithdebinfo")
                 )
                 if candidate.is_file()
             ),
             None,
         )
-        if sys.platform != "win32" or executable is None:
-            self.skipTest("Build pinyon_shift_fh1_shader_pack_tests for the Windows loader check")
+        if executable is None:
+            self.skipTest("Build pinyon_shift_fh1_shader_pack_tests for the runtime loader check")
         bytecode = b"DXBCpixel"
         entry = PACK.ShaderEntry(
             PACK.ShaderIdentity(2, 1, 2), bytecode, hashlib.sha256(bytecode).digest(),
