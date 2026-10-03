@@ -86,19 +86,32 @@ when the processor has it and one compile job per 1.5 GB of available memory;
 rebuilds after host or ShiftGlue changes, and `python3 tools/pinyon.py verify
 --iso FILE` checks an image only. Logs from each step are in `.local/logs`.
 
-On Vulkan the game translates shaders as it runs and keeps the pipelines the
-driver compiles in `.local/preview/cache/shaders` for later runs, so a drive
-through new scenery pauses briefly only the first time its shaders are met.
-To take the opening's share of that out of play:
+On Vulkan, a shader the game meets for the first time has to be translated,
+and each new pipeline has to be compiled by the driver. Both cause a short
+pause, so a drive through new scenery pauses briefly the first time.
+The pipelines are kept in `.local/preview/cache/shaders` for later runs. To
+take as much of that as possible out of play:
 
 ```sh
 python3 tools/pinyon.py prepare-shaders
 ```
 
-It drives the opening hidden for about two minutes, on a throwaway state that
-shares the preview's cache and settings (the shaders depend on the internal
-resolution), and never touches the save. Run it again after changing the
-internal resolution or the graphics driver.
+It takes about three minutes:
+
+1. It extracts the disc's shaders (12,846 programs).
+2. It runs the opening hidden with the offline shader producer, which
+   translates every shader variant on the disc in about two seconds. The
+   route's pipelines are compiled into the cache as it goes.
+3. It stages the result as a SPIR-V pack of about 1.1 GB at 2x. The game
+   then loads translations from the pack instead of translating during play.
+
+The run uses a throwaway state that shares the preview's cache and settings,
+because the shaders depend on the internal resolution. It never touches the
+save, and everything it produces stays in `.local`.
+
+Run it again after changing the internal resolution or the graphics driver.
+Shaders that the pack lacked during play are recorded in
+`cache/fh1-shader-misses`, and the next preparation adds them to the pack.
 
 The graphical launcher does the same from a window: choose the ISO, verify and
 build, prepare shaders, change the internal resolution, output scaling and

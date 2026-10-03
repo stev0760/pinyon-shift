@@ -189,9 +189,12 @@ def shader_preparation_status() -> tuple[bool, str]:
         record = json.loads(receipt.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         record = {}
-    if record.get("result") == "normal-exit":
+    if record.get("result") == "normal-exit" and record.get("pack"):
         finished = str(record.get("finished_utc", ""))[:10]
         return True, f"Shaders prepared{(' on ' + finished) if finished else ''}."
+    if record.get("result") == "normal-exit":
+        return False, ("The opening's pipelines are prepared but the disc's shaders are not "
+                       "packed yet: prepare shaders again.")
     return False, ("Shaders are not prepared: the first drives through new scenery pause "
                    "briefly while they compile.")
 
@@ -583,7 +586,9 @@ class LauncherWindow(Adw.ApplicationWindow):
             return
         self.set_playing(True)
         self.ready_title.set_label("Preparing shaders")
-        self.shaders_label.set_label("Driving the opening in the background; about two minutes.")
+        self.shaders_label.set_label(
+            "Translating the disc's shaders and driving the opening in the background; "
+            "about three minutes.")
         pinyon.LOGS.mkdir(parents=True, exist_ok=True)
         output_path = pinyon.LOGS / "launcher-prepare-shaders.out"
         output = open(output_path, "w", encoding="utf-8")
@@ -616,7 +621,8 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.set_playing(False)
         self.refresh_ready_subtitle()
         if result.get("prepared"):
-            self.toast("Shaders prepared: the opening's pipelines are in the cache.")
+            self.toast("Shaders prepared: the disc's shaders are packed and the opening's "
+                       "pipelines are in the cache.")
         elif errors:
             self.toast(errors.splitlines()[-1].removeprefix("error: "))
         else:

@@ -13,12 +13,14 @@ environment the game reads and starts it, then reports how it exited:
 
 On Windows the D3D12 shader pack is prepared first through
 tools/prepare-fh1-shaders.ps1 (skip it with --skip-shader-preparation); on
-Linux the game runs on Vulkan, translates shaders itself and keeps the
-pipelines it compiles in the state's cache for the next run. `prepare-shaders`
-fills that cache before play, since every pipeline the game meets for the
-first time costs it a frame or more: it runs the shader preparation route
-hidden, on a throwaway state that shares the player's cache and settings,
-for about two minutes:
+Linux the game runs on Vulkan and keeps the pipelines it compiles in the
+state's cache for the next run. `prepare-shaders` readies both before play,
+since a shader the game translates or a pipeline it compiles for the first
+time costs it a frame or more (NP-12.9): it extracts the disc's shaders, runs
+the shader preparation route hidden with the offline producer, which
+translates every disc shader variant first, on a throwaway state that shares
+the player's cache and settings, and stages the SPIR-V pack it captured, in
+about three minutes:
 
   pinyon.py prepare-shaders [--state-root DIR] [--json]
 
@@ -47,6 +49,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -210,17 +213,58 @@ def launch(args: argparse.Namespace) -> dict:
     return result
 
 
+def shader_production_summary(state: Path) -> dict:
+    """What the offline producer's run recorded: the disc corpus translation
+    from the runtime log and the shader capture's summary event."""
+    summary: dict = {}
+    log = state / "logs" / "runtime.log"
+    text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+    corpus = re.search(r"FH1 disc corpus translated (\d+) vertex and (\d+) pixel shader "
+                       r"variants with (\d+) failures", text)
+    if corpus:
+        summary["corpus"] = {"vertex": int(corpus[1]), "pixel": int(corpus[2]),
+                             "failures": int(corpus[3])}
+    for events in sorted((state / "logs").glob("*.jsonl")):
+        for line in events.read_text(encoding="utf-8", errors="replace").splitlines():
+            if '"native_renderer.shader_capture.summary"' not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            summary["capture"] = {key: int(event.get(key, 0)) for key in
+                                  ("entries", "duplicate_callbacks", "rejected_callbacks")}
+    return summary
+
+
+def run_pack_tool(arguments: list[str]) -> dict:
+    command = [sys.executable, str(ROOT / "tools" / "native-shader-pack.py")] + arguments
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode:
+        raise LaunchError(f"native-shader-pack.py {arguments[0]} failed: "
+                          f"{(completed.stderr or completed.stdout).strip()}")
+    return json.loads(completed.stdout)
+
+
 def prepare_vulkan_shaders(args: argparse.Namespace) -> dict:
-    """Runs the shader preparation route hidden on a throwaway state that
-    shares the player's cache, so the Vulkan pipelines along it are compiled
-    and saved before play. The player's settings are copied over, because the
-    shaders depend on them (the draw resolution scale above all); the save is
-    never touched."""
+    """Prepares Vulkan shaders on a throwaway state that shares the player's
+    cache. The disc's shaders are extracted and the shader preparation route
+    is run hidden with the offline producer plugin: it translates every disc
+    shader variant at startup and the route translates the rest it draws,
+    for the shader capture, and the route's pipelines are compiled into the
+    shared cache as it goes. The capture becomes the SPIR-V pack the game
+    loads instead of translating. The player's settings are copied over,
+    because the shaders depend on them (the draw resolution scale above all);
+    the save is never touched."""
     if WINDOWS:
         raise LaunchError("on Windows the launcher prepares the D3D12 shader pack itself")
     state = (args.state_root or ROOT / ".local" / "preview").resolve()
+    build = (args.build_directory or default_build_directory(args.configuration)).resolve()
+    game = (args.game_root or GAME_ROOT).resolve()
     if not SHADER_PREPARATION_ROUTE.is_file():
         raise LaunchError(f"the shader preparation route is missing at {SHADER_PREPARATION_ROUTE}")
+    if game_running():
+        raise LaunchError("Pinyon Shift is already running")
     work = SHADER_PREPARATION_WORK
     if work.exists():
         shutil.rmtree(work)
@@ -230,21 +274,72 @@ def prepare_vulkan_shaders(args: argparse.Namespace) -> dict:
     if config.is_file():
         shutil.copyfile(config, throwaway / "config" / "pinyon_shift.toml")
     started = datetime.now(timezone.utc)
-    print("Preparing shaders (about two minutes)...", flush=True)
-    result = launch(argparse.Namespace(
-        configuration=args.configuration, build_directory=args.build_directory,
-        game_root=args.game_root, state_root=throwaway, cache_root=state / "cache", hidden=True,
-        skip_shader_preparation=True, render_test_script=SHADER_PREPARATION_ROUTE,
-        render_test_output=work / "out", timeout=args.timeout or 900.0, game_arguments=[]))
-    receipt = {"schema": 1, "route": SHADER_PREPARATION_ROUTE.name,
+
+    # Neither the producer nor the archive extractor is in the default build.
+    run_logged(["cmake", "--build", str(build), "--target", "rexgpu-fh1-producer",
+                "pinyon_shift_fh1_archive_extract"],
+               LOGS / "shader-producer-build.log", "Building the shader producer", ROOT)
+    run_logged([sys.executable, str(ROOT / "tools" / "extract-fh1-shader-corpus.py"), str(game),
+                "--output", str(work / "corpus.json"), "--binary-dir", str(work / "corpus"),
+                "--archive-extractor", str(build / "pinyon_shift_fh1_archive_extract")],
+               LOGS / "shader-corpus.log", "Extracting the game's shaders", ROOT)
+
+    # The game loads the producer in place of its GPU plugin when the corpus
+    # is set; it sits next to the executable for this run only. Plugins carry
+    # the build type's postfix (PluginFileName in the SDK).
+    postfix = {"RelWithDebInfo": "rd"}.get(args.configuration, "")
+    producer = f"librexgpu-fh1-producer{postfix}.so"
+    staged = build / producer
+    shutil.copyfile(build / "rexglue-artifacts" / producer, staged)
+    variables = {"PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR": str(work / "corpus"),
+                 "PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR": str(work / "translation")}
+    saved = {name: os.environ.get(name) for name in variables}
+    os.environ.update(variables)
+    print("Preparing shaders (about three minutes)...", flush=True)
+    try:
+        result = launch(argparse.Namespace(
+            configuration=args.configuration, build_directory=build, game_root=game,
+            state_root=throwaway, cache_root=state / "cache", hidden=True,
+            skip_shader_preparation=True, render_test_script=SHADER_PREPARATION_ROUTE,
+            render_test_output=work / "out", timeout=args.timeout or 1800.0, game_arguments=[]))
+    finally:
+        staged.unlink(missing_ok=True)
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    # The pack is staged whenever the disc corpus was translated and captured
+    # whole, even if the route then failed: the game translates whatever a pack
+    # lacks and records it for the next preparation.
+    production = shader_production_summary(throwaway)
+    corpus, capture = production.get("corpus"), production.get("capture")
+    pack: dict = {}
+    if (corpus and not corpus["failures"] and capture and capture["entries"] and
+            not capture["rejected_callbacks"]):
+        built = run_pack_tool(["build", str(work / "translation" / "shader-manifest.json"),
+                               "--output", str(work / "shaders.pnsp")])
+        staged_pack = run_pack_tool(["stage", str(work / "shaders.pnsp"),
+                                     "--state-root", str(state)])
+        pack = {"entries": built.get("entry_count"), "bytes": built.get("size_bytes"),
+                "sha256": staged_pack.get("pack_sha256"),
+                "destination": staged_pack.get("destination")}
+        (work / "shaders.pnsp").unlink(missing_ok=True)
+    shutil.rmtree(work / "translation", ignore_errors=True)
+
+    receipt = {"schema": 2, "route": SHADER_PREPARATION_ROUTE.name,
                "started_utc": started.strftime("%Y-%m-%dT%H:%M:%SZ"),
                "finished_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-               "result": result["result"], "exit_code": result.get("exit_code")}
+               "result": result["result"], "exit_code": result.get("exit_code"),
+               **production, "pack": pack or None}
     shaders = state / "cache" / "shaders"
     shaders.mkdir(parents=True, exist_ok=True)
     receipt_path = shaders / SHADER_PREPARATION_RECEIPT
     receipt_path.write_text(json.dumps(receipt, indent=1) + "\n", encoding="utf-8")
-    return {**result, "prepared": result["result"] == "normal-exit", "receipt": str(receipt_path)}
+    return {**result, **production, "pack": pack or None,
+            "prepared": result["result"] == "normal-exit" and bool(pack),
+            "receipt": str(receipt_path)}
 
 
 def sha256_file(path: Path) -> str:

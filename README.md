@@ -279,8 +279,9 @@ python3 tools/pinyon.py launch
 ```
 
 or `python3 launcher/linux/pinyon_shift_launcher.py` does it from a GTK window.
-`prepare-shaders` is optional: it compiles the opening's Vulkan pipelines
-into the cache ahead of play, in a hidden two-minute run.
+`prepare-shaders` is optional but recommended: in a hidden run of about three
+minutes, it translates every shader on the disc into a local pack and compiles
+the opening's Vulkan pipelines into the cache.
 See [Building](docs/BUILDING.md#linux) and
 [Troubleshooting](docs/TROUBLESHOOTING.md) for details.
 
